@@ -280,7 +280,7 @@ function batch {
 }
 
 usage="\
-Usage: ./nagraj [-h] [--help] Wyswietl pomoc
+Usage: .$0 [-h] [--help] Wyswietl pomoc
              [-c] kopiuj plyte
 	     [-r] nagraj plik obrazu
 	     [-b] nagraj folder
