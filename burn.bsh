@@ -1,0 +1,306 @@
+#!/bin/bash
+#########################################################
+#							#
+#	CD/DVD Burner v 0.1 beta			#
+#				by Harv			#
+#########################################################
+
+####CONFIG######
+
+#Plik tymczasowy
+tf=/tmp/`date +%s`.iso
+
+#Adres napedu
+DEV=/dev/hdc
+
+#Pytaj o parametry nagrywania t/n (domyslnie nie)
+PARAMS=N
+
+#----------------------------------------------------------------------------------#
+
+function isNumeric(){ echo "$@" | grep -q -v "[^1-9]";}
+
+function die { echo "Blad"
+	    exit 1;}
+
+function check {
+    echo 'Sprawdzam naped ' $DEV
+    `mount  $DEV &> /dev/null`
+    cd=$?
+    
+    `umount $DEV &> /dev/null`
+        if [[ "$cd" == 0 ]]; then
+	    read -p 'Plyta nagrana wloz inna'
+	fi
+}
+
+function rec_params {
+    case $params in
+      T | t) read -p 'Podaj predkosc nagrywania: ' speed
+          isNumeric "$speed" || speed=''
+
+            if [[ $speed != '' ]]; then
+              speed=speed=$speed
+            fi
+            echo $speed
+          read -p 'Dodatkowe paramtery nagrywania' add_params;;
+
+      *)speed=''
+        add_params='-v -eject'
+    esac
+}
+
+function spawaj() { cdrecord $speed $add_params "$@" ;}
+
+
+function copy {
+
+      if [ $UID -ne 0 ];then
+          echo "Musisz miec uprawnienia admina."
+          exit 1
+      fi
+
+      read -p 'Ilosc kopii: ' a
+
+      isNumeric "$a" || die 
+       
+      echo 'Tworze obraz plyty...'
+            
+           
+          dd if=$DEV of=$tf
+          
+          if [[ $? != 0 ]]; then
+            die
+          fi
+              
+          sleep 1
+          eject
+
+          read -p 'Wloz pusta plyte'    
+
+          #Parametry nagrywania
+          rec_param     
+
+      for ((i=1;i<=$a;i+=1)); 
+      do
+          cd="0"
+          until [[ "$cd" != 0 ]]; do
+              check
+          done
+
+        spawaj $tf
+
+          if [[ $? != 0 ]]; then
+              echo 'Cos poszlo nie tak'
+              i=$(($i - 1))
+          fi
+
+          cc=$(($a - $i));
+
+          if [[ $cc>0 ]]; then    
+              echo 'Pozostalo kopii: ' $cc;
+              read -p "Czekam na nowy dysk: " 
+          fi
+      done
+
+      read -p 'Skasowac plik iso? (T/n) ' tn
+
+      case $tn in 
+              T | t) echo 'Kasuje plik iso'	
+                      rm $tf ;;
+              N | n) echo 'Plik '$tf' nie zostal skasowany' ;;
+              *)  echo 'Kasuje plik '$tf
+            rm $tf ;;
+      esac
+}
+
+function burn {
+
+    read -p 'Podaj folder do nagrania: ' f
+
+        until [ -d $f ]; do
+            read -p 'Nieprawidlowy folder, podaj wlasciwa sciezke: ' f
+        done
+        
+        read -p 'Ilosc kopii: ' a
+
+        isNumeric "$a" || die 
+     
+        echo 'Tworze obraz plyty...'
+        
+        mkisofs -o $tf -joliet-long -r -l $f
+        
+        if [[ $? != 0 ]]; then
+            die
+        fi
+        #Parametry nagrywania
+        rec_param    
+
+    for ((i=1;i<=$a;i+=1)); 
+    do
+
+        cd="0"
+        until [[ "$cd" != 0 ]]; do
+      check
+        done
+        
+      spawaj "$tf"
+        
+        if [[ $? != 0 ]]; then
+          echo 'Cos poszlo nie tak'
+          i=$(($i - 1))
+        fi
+
+        cc=$(($a - $i));
+
+        if [[ $cc>0 ]]; then    
+            echo 'Pozostalo kopii: ' $cc;
+            read -p "Czekam na nowy dysk: " 
+        fi
+
+    done
+
+    read -p 'Skasowac plik iso? (T/n) ' tn
+
+    case $tn in 
+            T | t) echo 'Kasuje plik iso'	
+          rm $tf;;
+            N | n) echo 'Plik '$tf' nie zostal skasowany' ;;
+            *)  echo 'Kasuje plik '$tf
+          rm $tf ;;
+    esac
+}
+
+function record {
+    
+        read -p 'Podaj nazwe pliku do nagrania: ' f
+
+            until [ -e $f ]; do
+          read -p 'Plik nie istnieje, podaj nazwe pliku: ' f
+            done
+
+
+            read -p 'Ilosc kopii: ' a
+            isNumeric "$a" || die 
+
+            #Parametry nagrywania
+            rec_param 
+
+            read -p 'Wloz pusta plyte'    
+
+            
+        for ((i=1;i<=$a;i+=1)); 
+        do
+            cd="0"
+            until [[ "$cd" != 0 ]]; do
+                  check		    
+            done
+            
+            spawaj $f
+            
+            if [[ $? != 0 ]]; then
+                echo 'Cos poszlo nie tak'
+                i=$(($i - 1))
+            fi
+            
+            cc=$(($a - $i));
+
+            if [[ $cc>0 ]]; then    
+                echo 'Pozostalo kopii: ' $cc;
+                read -p "Czekam na nowy dysk: " 
+            fi
+
+       done
+}
+
+function batch { 
+    
+        declare -a pliki
+
+        read -p 'Podaj folder zawierajacy pliki iso ' f
+        
+        until [ -d $f ]; do
+            read -p 'Nieprawidlowy folder, podaj wlasciwa sciezke: ' f
+        done
+        
+        pliki=(`ls $f |grep '.iso$'`)
+
+        if [[ ${pliki[*]} == '' ]]; then
+            echo 'Brak plikow iso w tym folderze'
+            exit 1;
+        fi
+
+
+        echo 'Pliki ktore zostana nagrane' ${pliki[*]}
+        
+        read -p 'Czy rozpoczac nagrywanie tych plikow? (T/n)' tn
+        
+        case $tn in 
+            N | n) echo 'Nagrywanie przerwane' 
+                    exit 1 ;;
+        esac
+        
+        #Parametry nagrywania
+        rec_param 
+       
+        cnt=${#pliki[@]}
+        echo "Liczba elementow: $cnt"
+        
+        for (( i = 0 ; i < $cnt ; i++ )); do
+        
+            if [ -e '$f/${pliki[$i]}' ]; then
+                read -p 'Plik' $f/${pliki[$i]} 'nie istnieje'
+                exit 1
+            fi
+               
+            cd="0"
+            until [[ "$cd" != 0 ]]; do
+                check
+            done
+              
+              echo 'Nagrywam plik '$f/${pliki[$i]}
+                  
+            spawaj "$f/${pliki[$i]}"
+              
+              if [[ $? != 0 ]]; then
+                  echo 'Cos poszlo nie tak'
+                  i=$(($i - 1))
+              fi
+              
+              a=$(($cnt - 1));
+              cc=$(($a - $i));
+
+              if [[ $cc>0 ]]; then    
+                    echo 'Pozostalo plikow: ' $cc;
+                    read -p "Czekam na nowy dysk: " 
+              fi
+
+        
+    done
+}
+
+usage="\
+Usage: ./nagraj [-h] [--help] Wyswietl pomoc
+             [-c] kopiuj plyte
+	     [-r] nagraj plik obrazu
+	     [-b] nagraj folder
+	     [-batch] nagraj wszystkie pliki iso z danego folderu
+	     "
+
+while [ $# -gt 0 ]
+do
+    case "$1" in
+    -c) copy; exit 0 ;;
+    -r) record; exit 0 ;;
+    -b) burn; exit 0 ;;
+    -batch) batch; exit 0 ;;
+    -h | --help | --h*)        
+     echo "$usage"
+      exit $?
+      ;;
+    
+    *) break ;;
+    esac
+    shift
+done
+
