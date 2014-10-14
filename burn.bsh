@@ -280,14 +280,14 @@ function batch {
 }
 
 usage="\
-Usage: .$0 [-h] [--help] Wyswietl pomoc
+Usage: $0 [-h] [--help] Wyswietl pomoc
              [-c] kopiuj plyte
 	     [-r] nagraj plik obrazu
 	     [-b] nagraj folder
 	     [-batch] nagraj wszystkie pliki iso z danego folderu
 	     "
 
-while [ $# -gt 0 ]
+while [ $# -ge 0 ]
 do
     case "$1" in
     -c) copy; exit 0 ;;
@@ -299,7 +299,8 @@ do
       exit $?
       ;;
     
-    *) break ;;
+    *) echo "$usage"
+	 break ;;
     esac
     shift
 done
